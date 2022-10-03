@@ -1,0 +1,996 @@
+\documentclass[oneside]{book}
+\usepackage[utf8]{inputenc}
+\usepackage[letterpaper,top=2cm,bottom=2cm,left=3cm,right=3cm,marginparwidth=1.75cm]{geometry}
+\usepackage{amsfonts,amsmath,graphicx,float,xcolor}
+\usepackage{appendix}
+
+\newcommand{\R}[0]{\mathbb{R}}
+\newcommand{\N}[0]{\mathbb{N}}
+\newcommand{\Z}[0]{\mathbb{Z}}
+\newcommand{\G}[0]{\mathbb{G}}
+\newcommand{\cA}[0]{\mathcal{A}}
+\newcommand{\cB}[0]{\mathcal{B}}
+\newcommand{\cC}[0]{\mathcal{C}}
+\newcommand{\cO}[0]{\mathcal{O}}
+\newcommand{\epsA}[0]{\epsilon_\cA}
+\newcommand{\epsB}[0]{\epsilon_\cB}
+\newcommand{\epsC}[0]{\epsilon_\cC}
+
+\setlength\parindent{0pt}
+
+\title{\Huge Digital signatures lecture notes}
+\author{\LARGE Luca Tarquini}
+\date{\LARGE June 2022}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+
+\chapter{Introduction}
+Signatures are the digital analogue of physical signatures.
+Properties we want are \textbf{authenticity} (document is signed \textbf{by that} person) and \textbf{integrity} (document has \textbf{not been changed} since signing).\\
+
+Applications of signatures are code apps, certificates, identity cards, etc.\\
+
+A digital signature scheme is a tuple $\Sigma{= (Gen, Sign, Vfy)}$ of 3 probabilistic polynomial-time (\textbf{PPT}) algorithms:
+\begin{itemize}
+    \item $Gen(1^k) \rightarrow (pk,sk)$
+    \item $Sign(sk, m) \rightarrow \sigma$
+    \item $Vfy(pk, m,\sigma) \rightarrow \{0,1\}$
+\end{itemize}
+
+$m \in \{0,1\}^*$, $k \in \N$ is the \textbf{security parameter} (length of the key).\\
+
+\textbf{Correctness}: $\forall k, m \in \{0,1\}^*, \forall (pk, sk) \leftarrow Gen(1^k): Vfy(pk, m, Sign(sk, m)) = 1$\\
+
+Concrete security definitions combine two things: adversarial \textbf{goals} and adversary \textbf{capabilities}.
+
+\textbf{Capabilities}:
+\begin{itemize}
+    \item No-message attack (NMA): adversary gets \textbf{only} $pk$.
+    \item Non-Adaptive chosen message attack (naCMA): adverary chooses $m_1, ..., m_q$, \textbf{then} obtains $pk$ and signatures $\sigma_1, ..., \sigma_n$.
+    \item Chosen message attack (CMA): adverary gets $pk$, \textbf{then} chooses one message at a time (adaptively) and gets the corresponding signature.
+\end{itemize}
+
+\textbf{Goals}:
+\begin{itemize}
+    \item Universal Unforgeability (UUF): adversary has to forge signature for a message $m$ \textbf{externally} given (chosen at random).
+    \item Existential Unforgeability (EUF): adversary forges signature for \textbf{any} random message $m$ not signed before.
+\end{itemize}
+
+A security experiment is a tool to formalize security definitions.
+Interactive process between two parties: adversary $\mathcal{A}$ and challenger $\mathcal{C}$.\\
+
+\textbf{EUF-CMA security experiment}: $\mathcal{A}$ wins iff $Vfy(pk, m^*, \sigma^*) = 1 \land m^* \notin \{m_1, ..., m_q\}$, where $q$ is a polynomial number of queries in the security parameter.\\
+
+A protocol is \textbf{secure} in a security definition iff $Pr[\mathcal{A}$ wins related experiment$]$ is negligible, that is a function \texttt{negl}: $\N \rightarrow \N$ such that:
+$\exists k_0, \forall c \in \N, \forall k > k_0, |negl(k)| < 1/k^c$.\\
+
+
+If $\Sigma$ is EUF-CMA secure, then $\Sigma$ is also UUF-CMA secure.
+Assume $\mathcal{A}$ can break UUF-CMA, construct $\mathcal{B}$ that plays EUF-CMA experiment.\\
+$\mathcal{C}$ sends $pk$ to $\mathcal{B}$ (and other messages $m_1, ..., m_q$).\\ $\mathcal{B}$ chooses $m^*$ and sends $pk$ and $m^*$ to $\mathcal{A}$.\\
+$\cA$ sends back $(m^*, \sigma^*)$.\\
+Whenever $\cA$ succeeds, so does $\cB$.\\
+
+\textbf{Strength of security definitions}:\\
+UUF $<$ EUF\\
+NMA $<$ naCMA $<$ CMA\\
+
+\textbf{Information-theoretic} security (cannot ever be broken) is NOT possible for digital signatures:
+\begin{itemize}
+    \item There exists an \textbf{unbounded} adversary $\cA$ with success probability 1 (brute-force).
+    \item There exists a \textbf{PPT} adversary $\cA$ with success probability $\frac{1}{2^L}$ (guessing) $\Rightarrow$ this is why we allow a negligible (and not zero) probability of success secure in our sense.
+\end{itemize}
+
+\paragraph{Message space extension}
+It is usually easier to construct signatures with small message space, e.g., $\{0,1\}^{q(k)}$, $q$ polynomial in the security parameter.
+
+A cryprographic \textbf{hash function} $H = (Gen_H, Eval_H)$ consists of two PPT algorithms:
+\begin{itemize}
+    \item $Gen_H(1^k)$ outputs a parameter $t$ that defines a function $H_t: \{0,1\}^* \rightarrow \mathcal{M}_t$.
+    \item $Eval_H(1^k, t, x)$ computes $H_t(x)$.
+\end{itemize}
+
+A hash function $H$ is \textbf{collision-resistant} (CR) iff for $t \leftarrow Gen_H(1^k)$ and all PPT $\cA$: Pr[$\cA(1^k, t) = (x, x') : H_t(x) = H_t(x') \land x \ne x'$] is negligible.
+
+Unbounded message space signatures: given $\Sigma' = (Gen', Sign', Vfy')$ with message space $\mathcal{M}$, and CR hash $H: \{0,1\}^* \rightarrow \mathcal{M}$, construct $\Sigma = (Gen, Sign, Vfy)$ with:
+\begin{itemize}
+    \item $Gen(1^k) \rightarrow (pk, sk) = ((pk', t), (sk', t))$
+    \item $Sign((sk', t), m) = Sign'(sk', H_t(m)) \rightarrow \sigma$
+    \item $Vfy((pk', t), m, \sigma) = Vfy'(pk', H_t(m), \sigma)$
+\end{itemize}
+
+Theorem: for every EUF-CMA PPT $\cA$ on $\Sigma$ there exist a EUF-CMA PPT $\cB$ on $\Sigma'$ and a PPT $\cC$ on collision-resistance of $H$, such that $\epsilon_\cB + \epsilon_\cC \ge \epsilon_\cA$ and roughly same runtimes.
+
+Whenever $\cA$ forges a signature for $\Sigma$ (which is also valid for $\Sigma'$), either:
+\begin{itemize}
+    \item $H(m)$ has been signed before, but $m \ne m_i \Rightarrow$ found collision.
+    \item $H(m)$ has never been signed before in $\Sigma'$.
+\end{itemize}
+
+This construction is called \textbf{Hash-then-Sign}.
+
+\chapter{One-time signatures}
+Signature schemes that can securely sign only one message.
+EUF-1-CMA and EUF-1-naCMA security experiments are introduced.
+
+These signatures are easy to construct and represent an important building block.
+
+\paragraph{One-way functions}
+$f: \{0,1\}^* \rightarrow \{0,1\}^*$
+
+Given $x$, easy (polynomial time in the size) to compute $f(x)$.
+
+Given $y$, hard (negligible probability) to compute \textbf{any} $x'$ in $f^{-1}(y)$.\\
+
+Theorem: if one-way functions exist, then $\mathcal{P} \ne \mathcal{NP}$.
+
+Proof: Consider the language $\mathcal{L}_f := \{(y, \bar{x}, 1^l) | \exists x \in \{0,1\}^l$ with prefix $\bar{x}$ and with $f(x) = y\}$.
+
+Then $\mathcal{L}_f \in \mathcal{NP}$ since $x$ is a witness for a word in the language.
+
+But if $\mathcal{L}_f \in \mathcal{P}$, then $\exists$ poly-time algorithm $D$ that decides $\mathcal{L}_f$. This $D$ can be used to invert $f$ by querying it bit-by-bit.
+
+Realistically, this implies that constructions of one-way functions require \textbf{assumptions} (such as RSA, DLog, etc).\\
+
+Another theorem justifying the use of assumptions is the following:\\
+If $\Sigma$ is a UUF-NMA secure signature scheme, then $\mathcal{P} \ne \mathcal{NP}$.
+
+Take the restriction of $Gen$ s.t. $Gen'$ outputs only $pk$. Then $Gen'$ is a one-way function. If it is not, the scheme can be broken. If one-way functions exist, $\mathcal{P} \ne \mathcal{NP}$.
+
+\paragraph{Uselessness of UUF-NMA}
+A UUF-NMA secure scheme can be built with \textbf{message-independent signatures}, with the help of a one-way function $f$.
+\begin{itemize}
+    \item $Gen(1^k): sk \leftarrow \{0,1\}^*, pk = f(sk)$.
+    \item $Sign(sk, m) = sk$
+    \item $Vfy(pk, m, \sigma): f(\sigma) = pk$
+\end{itemize}
+
+\section{Lamport's one-time signatures}
+\begin{itemize}
+    \item $Gen(1^k)$: choose $x_{1,0}, x_{1,1}, ..., x_{n,0}, x_{n,1}$ uniformly from $\{0,1\}^k$, and $y_{j,i} := f(x_{j,i})$.
+    \begin{align}
+        sk = \begin{pmatrix}
+x_{1,0} & ... & x_{n,0}\\
+x_{1,1} & ... & x_{n,1}
+\end{pmatrix}\\
+pk = \begin{pmatrix}
+y_{1,0} & ... & y_{n,0}\\
+y_{1,1} & ... & y_{n,1}
+\end{pmatrix}
+    \end{align}
+    \item $Sign(sk, m)$: $\sigma = (x_{1,m_1}, x_{2,m_2}, ..., x_{n,m_n})$
+    
+    \item $Vfy(pk, m, \sigma)$: check that for all $i \in \{1, ..., n\}$, we have: $f(x_i^\sigma) = y_{i,m_i}$
+\end{itemize}
+
+Theorem: for every EUF-1-naCMA PPT $\cA$, there is a PPT $\cB$ on $f$ with rougly same runtime and success probability $\epsilon_\cB \ge \frac{\epsilon_\cA}{n}$.
+
+Proof: $\cB$ embeds $y = f(x)$ into $pk$ as $y_{i,1-m_i}$ in his forgery (so that it is not used to sign the chosen message, need to know the preimage). Chooses other $x_{i,b}$ randomly.
+The probability that the embedded bit is forged is at least $\frac{1}{n}$ (single bit modified, forged message must be different).
+
+Hence, $\cB$ wins with probability $\epsilon_\cB \ge \frac{\epsilon_\cA}{n}$.\\
+
+Actually, this scheme is \textbf{EUF-1-CMA} secure.
+
+This scheme is not very efficient though, as it requires \textbf{many evaluations} of one-way function and \textbf{large} keys.
+
+\section{Discrete-Log-based one-time signatures}
+Given a cyclic group $\G$ of prime order $p$, and a generator $g$, the DLog problem is stated as follows:
+
+Given $g$ and $y \leftarrow \G$, find $x \in \Z_p$ with $g^x = y$.\\
+
+The DLog assumption states that for all PPT adversaries, the probability of solving the DLog problem is \textbf{negligible}.\\
+
+Signature scheme:
+\begin{itemize}
+    \item $Gen(1^k): x \leftarrow \Z^*_p$, $\omega \leftarrow \Z_p$, $h := g^x$, $c := g^\omega \Rightarrow pk = (g, h, c), sk = (x, \omega)$
+    \item $Sign(sk, m): \sigma = \frac{\omega - m}{x}$
+    \item $Vfy(pk, m, \sigma): c = g^mh^\sigma$
+\end{itemize}
+
+This scheme is \textbf{EUF-1-naCMA} secure: for every EUF-1-naCMA PPT $\cA$, there exists a PPT $\cB$ with roughly same runtime and success probability $\epsilon_\cB \ge \epsilon_\cA$ that solves the DLog problem.
+
+Proof: Choose $\sigma$ randomly, compute $c = g^mh^\sigma$ so that $\sigma$ is valid and send the $pk$.
+Upon receipt of $(m^*, \sigma^*)$, two signing equations for two unknowns $x, \omega$. Extract $x = \frac{m^*-m}{\sigma-\sigma^*}$.
+
+\paragraph{EUF-CMA attack} $g^{m_1}h^{\sigma_1} = c = g^{m_2}h^{\sigma_2} \Rightarrow m_1+x\sigma_1 = m_2+x\sigma_2$.
+
+Find $x$, then compute $\omega$ as $g^\omega = c = g^mg^{x\sigma}$, secret key is then found.
+
+\section{RSA-based one-time signatures}
+Given $N = P \cdot Q$, where $P, Q$ are large ($>$ 1000 bits) prime numbers, $\phi(N) = (P-1) \cdot (Q-1) = |\Z^*_N|$ (totient, order of multiplicative invertible elements), choose $e \in \N$ uniformly between $1$ and $\phi(N)$ with $gcd(e, \phi(N)) = 1$.
+
+Then $d \in \N$ with $e \cdot d = 1 \mod \phi(N)$ can be found efficiently.
+
+For $x \in \Z_N$, we have $x^{ed} = x \mod N$.\\
+
+The RSA problem is stated as follows:
+
+Given $N, e$ and $y \leftarrow \Z_N$, find $x \in \Z_N$ with $x^e = y \mod N$.
+
+The RSA assumption states that for all PPT adversaries, the probability of solving the RSA problem is \textbf{negligible}.\\
+
+Signature scheme: (finite space $2^n$)
+\begin{itemize}
+    \item $Gen(1^k):$ Choose $P, Q$, choose \textbf{prime} $e$ with $2^n < e < \phi(N)$, with $gcd(e, \phi(N)) = 1$.
+    
+    Choose $d = e^{-1} \mod \phi(N)$, $J, c \leftarrow \Z_N$.
+    
+    $pk = (N, e, J, c), sk = d$.
+    \item $Sign(sk, m): \sigma = (\frac{c}{J^m})^d \mod N$.
+    \item $Vfy(pk, m, \sigma): c = J^m\sigma^e \mod N$.
+\end{itemize}
+
+Correctness is trivially verified.\\
+
+In this scheme the \textbf{prime-$e$-RSA assumption} is used, which is implied asymptotically by the RSA assumption.
+
+The motivation is to have a cleaner reduction without security losses.
+
+\paragraph{Shamir's trick} Let $J, S \in \Z^*_N$ and $e, f \in \Z$, with:
+\begin{itemize}
+    \item $gcd(e,f) = 1$.
+    \item $J^f = S^e \mod N$.
+\end{itemize}
+Then, there is an algorithm that efficiently computes $x \in \Z_N$ with $x^e = J \mod N$.
+
+Proof sketch: set $x = J^\alpha S^\beta$,\footnote{The root $x$ is of this form.} with $\alpha e+\beta f = 1$, since $gcd(e,f) = 1$.\\
+
+Theorem: for every \textbf{EUF-1-naCMA} PPT $\cA$, there exists a PPT $\cB$ that solves the prime-$e$-RSA problem with roughly same runtime and success probability $\epsilon_\cB \ge \epsilon_\cA$.
+
+Proof: set $J = y$, choose $\sigma$ randomly and compute $c = J^m\sigma^e (\mod N)$ so that $\sigma$ is valid.
+
+Upon receipt of $(m^*, \sigma^*)$, $J^m\sigma^e = c = J^{m^*}(\sigma^*)^e \Rightarrow J^{m-m^*} = (\frac{\sigma^*}{\sigma})^e$.
+
+Since $0 < m-m^* < 2^n$, and $e > 2^n$ prime, then $gcd(e, m-m^*) = 1 \rightarrow$ Shamir's trick finds $x$ with $x^e = J = y$.
+
+\paragraph{EUF-CMA attack} $J^{m_1}\sigma_1^e = c = J^{m_2}\sigma_2^e (\mod N) \Rightarrow J^{m_1-m_2} = (\frac{\sigma_2}{\sigma_1})^e$.
+
+Shamir's trick yields $x$ with $x^e = J \mod N$.
+
+Given $x, m, \sigma$ and any $m^*$, can forge $\sigma^*:=\sigma x^{m-m^*}$.
+
+\section{Many-time signatures from one-time signatures}
+
+\paragraph{EUF-CMA from EUF-naCMA and EUF-1-naCMA} An EUF-CMA secure signature scheme $\Sigma$ can be constructed from an EUF-naCMA secure scheme $\Sigma'$ with the help of an EUF-1-naCMA secure one-time signature scheme $\Sigma^{(1)}$:
+\begin{itemize}
+    \item $Gen(1^k) = Gen'(1^k) \Rightarrow (pk, sk) = (pk', sk')$
+    \item $Sign(sk, m): \sigma = (pk^{(1)}, \sigma^{(1)}, \sigma')$, where:
+    
+    $pk^{(1)}$ is a fresh new key from $Gen^{(1)}(1^k)$
+    
+    $\sigma^{(1)} \leftarrow Sign^{(1)}(sk^{(1)}, m)$ (signs the actual message)
+    
+    $\sigma' \leftarrow Sign'(sk, pk^{(1)})$ (binds $pk^{(1)}$ to $sk$)
+    \item $Vfy(pk, m, \sigma) = Vfy'(pk, pk^{(1)}, \sigma') \land Vfy^{(1)}(pk^{(1)}, m, \sigma^{(1)})$
+\end{itemize}
+
+Theorem: for every PPT $\cA$ that breaks EUF-CMA in $\Sigma$ with at most $q$ queries, there exist PPTs $\cB$ and $\cC$ with roughly same runtimes, and:
+\begin{itemize}
+    \item $\cB$ breaks EUF-1-naCMA in $\Sigma^{(1)}$ with probability $\epsilon_B$
+    \item $\cC$ breaks EUF-naCMA in $\Sigma'$ with probability $\epsilon_C$
+\end{itemize}
+such that: $q \cdot \epsilon_B + \epsilon_C \ge \epsilon_A$.
+
+In particular, if $\epsilon_A$ is non-negligible, then so is $\epsilon_B$ \textbf{or} $\epsilon_C$.
+
+Proof:
+\begin{itemize}
+    \item Reduction to security of $\Sigma'$: $\sigma_i = (pk_i^{(1)}, \sigma_i^{(1)}, \sigma'_i)$. $\cC$ wins iff  $\cA$ outputs valid forgery $(m^*, \sigma^*)$ \textbf{and} $pk_*^{(1)} \notin \{pk_i^{(1)}\}$.
+    
+    $\epsilon_C$ = $Pr[\cA$ wins $\land pk_*^{(1)} \notin \{pk_i^{(1)}\}]$.
+    \item Reduction to security of $\Sigma^{(1)}$: choose $pk', sk'$ and $i^*$, relay to such challenger only if $i = i^*$, otherwise choose randomly. Compute $\sigma_i$ using $sk'$ and $\sigma_{i^*}^{(1)}$. Reduction wins iff $\sigma_*^{(1)}$ is valid ($\cA$ outputs valid forgery) and $pk_*^{(1)}$ was used before (especially in $i^*$).
+    
+    
+\end{itemize}
+
+Whenever $\cA$ wins, either $pk_*^{(1)}$ was used before or not. Let $p := Pr[pk_*^{(1)} \in \{pk_i^{(1)}\} | \cA$ wins$]$:
+\begin{itemize}
+    \item $\epsilon_B \ge \epsilon_A \cdot \frac{1}{q} \cdot p$.
+    \item $\epsilon_C \ge \epsilon_A \cdot (1-p)$.
+\end{itemize}
+
+Result is: $q \cdot \epsilon_B + \epsilon_C \ge \epsilon_A$\\
+
+The following schemes are \textbf{EUF-$q$-CMA} secure (whether the needed hash functions are collision-resistant).
+\paragraph{Naive approach} Use $q$ keypairs for $q$ desired signature:
+\begin{itemize}
+    \item $Gen(1^k) \rightarrow pk := (pk_1, ..., pk_q)$, $sk := (sk_1, ..., sk_q, state=1)$
+    \item $Sign(sk, m): \forall st, \sigma_{st} \leftarrow Sign^{(1)}(sk_{st}, m)$, $\sigma := (\sigma_{st}, state)$, $state = state + 1$
+    \item $Vfy(pk, m, (\sigma_i, i)) = Vfy^{(1)}(pk_i, m, \sigma_i), \forall i$
+\end{itemize}
+
+Complexity: $|pk| \in \cO(q)$, $|sk| \in \cO(q)$, $|\sigma| \in \cO(1)$
+
+\paragraph{Intermediate approach} Use a hash function to compress the keys:
+\begin{itemize}
+    \item $Gen(1^k) \rightarrow pk := (H, H(pk_1, ..., pk_q))$, $sk := (sk_1, ..., sk_q, pk_1, ..., pk_q, state=1)$
+    \item $Sign(sk, m): \forall st, \sigma_{st} \leftarrow Sign^{(1)}(sk_{st}, m)$, $\sigma := (\sigma_{st}, state, pk_1, ..., pk_q)$, $state = state + 1$
+    \item $Vfy(pk, m, (\sigma_i, i)) = Vfy^{(1)}(pk_i, m, \sigma_i) \land H(pk_1, ..., pk_q) == pk, \forall i$
+\end{itemize}
+
+Complexity: $|pk| \in \cO(1)$, $|sk| \in \cO(q)$, $|\sigma| \in \cO(q)$
+
+\paragraph{Merkle trees} Use a Merkle Tree to compress the size of the signature:
+\begin{itemize}
+    \item $Gen(1^k) \rightarrow pk := (H, hash\_root(pk_1, ..., pk_q))$, $sk := (sk_1, ..., sk_q, pk_1, ..., pk_q, state=1)$
+    \item $Sign(sk, m): \forall st, \sigma_{st} \leftarrow Sign^{(1)}(sk_{st}, m)$, $\sigma := (\sigma_{st}, state, pk_i, co\_path)$, $state = state + 1$
+    \item $Vfy(pk, m, (\sigma_i, i)) = Vfy^{(1)}(pk_i, m, \sigma_i) \land hash\_root == pk, \forall i$
+\end{itemize}
+
+where the \textbf{co-path}, given a starting vertex $v$, is the set of vertices $u_1, ..., u_n$, such that $u_i$ is the sibling of the $i$-th vertex on the path from $v$ to the root.
+
+Complexity: $|pk| \in \cO(1)$, $|sk| \in \cO(q)$, $|\sigma| \in \cO(log(q))$
+
+\paragraph{Compressing the secret key} Choose keypairs through a \textbf{pseudo-random function}. Need to store only the seed.\\
+
+However, when signing, need to recompute all relevant keys (\textbf{slow}).
+
+Complexity: $|pk| \in \cO(1)$, $|sk| \in \cO(1)$, $|\sigma| \in \cO(log(q))$
+
+\paragraph{Decreasing generation (and signing?) time} So far, key generation and signing took $\cO(q)$.
+
+A solution is to build an entire tree where nodes are one-time-signatures keypairs. Every key signs the public keys of the two child nodes.
+
+This tree can be built \textbf{lazily}.
+
+\chapter{RSA-based signatures}
+Considering the RSA assumption, it is possible to construct more efficient signature schemes without relying on one-way functions only.
+
+\section{Textbook RSA}
+A first step towards this approach is given by the following (insecure) scheme:
+\begin{itemize}
+    \item $Gen(1^k): pk = (N, e), sk = (N, d)$, where $N, e, d$ are chosen consistently with the RSA problem.
+    \item $Sign(sk, m): \sigma = m^d \mod N$
+    \item $Vfy(pk, m, \sigma): m = \sigma^e \mod N$
+\end{itemize}
+
+This scheme is UUF-NMA secure if the RSA assumption holds, but \textbf{NOT EUF-NMA} secure (choose signature first, extract $m$; multiplicative homomorphic).\\
+
+In order to build more secure schemes, suitable \textbf{preprocessing} is performed on the message $m$ before signing:
+
+\section{RSA PKCS \#1 v1.5}
+Let $H$ be a collision-resistant hash function:
+\begin{itemize}
+    \item $Gen(1^k): $ as with textbook RSA.
+    \item $Sign(sk, m): m' := 0x00||0x01||0xFF||...||0xFF||0x00||spec. H||H(m)$, $\sigma' = (m')^d \mod N$
+    \item $Vfy(pk, m, \sigma): m' = \sigma^e \mod N$, check if $m'$ is a valid encoding of $m$.
+\end{itemize}
+
+Security of this scheme is not clear: \textbf{no attacks known}, but also \textbf{no security proof}.
+
+However, it is not trivially multiplicative homomorphic.
+
+\section{RSA-FDH}
+By demanding a suitable (but very strong) security requirement for a hash function $H: \{0,1\}^* \rightarrow \Z_N$, namely \textbf{collision-resistance}, it can be shown that this eliminates the weaknesses incurred by the homomorphism of the textbook RSA scheme.
+It is essential that $H$ covers \textbf{all} of $\Z_N$, without being the identity (otherwise multiplicative homomorphic).
+\begin{itemize}
+    \item $Gen(1^k): $ as with textbook RSA.
+    \item $Sign(sk, m): \sigma := H(m)^d \mod N$
+    \item $Vfy(pk, m, \sigma): \sigma^e \mod N = H(m)$.
+\end{itemize}
+
+Correctness is trivially satisfied.
+
+\subsection{The random oracle model}
+The random oracle model (ROM) assumes hash functions to be idealized, outputting \textbf{truly random} values as black boxes. For any input $m$, the function returns a unique (the same on the same input), random value $H(m)$.
+There is \textbf{no "real" attack} for those functions in such a model.
+
+All parties use the same oracle.
+
+It is \textbf{impossible} for any real hash function to implement ROM.\\
+
+This idealization has the sole purpose to execute security proofs with \textbf{stronger assumptions}. A proof in the standard model has better outcomes than a proof in the ROM model, but some problems are solvable \textbf{only} in ROM.
+
+It is \textbf{unclear} what a ROM security proof implies in practice.
+
+\subsection{Security proof of RSA-FDH in the ROM}
+In the following we will assume that for \textbf{every} signing query, the adversary $\cA$ has previously queried $H(m_i)$, as well as the forged $H(m^*)$.
+
+This assumption is not restrictive as other adversaries can be trivially reduced to those without affecting runtime (ROM is efficient).\\
+
+Theorem: if $H$ is modeled as the random oracle, then for every PPT $\cA$ that breaks \textbf{EUF-CMA} security of RSA-FDH with at most $q_H$ queries to the ROM $H$, there exists a PPT $\cB$ with roughly same runtime that solves the RSA problem with success probability:
+\begin{align}
+    \epsilon_\cB \ge \frac{\epsilon_\cA}{q_H}.
+\end{align}
+
+Proof: $\cB$ simulates also the RO for $\cA$. Simulation works as follows: set $H(m_i) = x_i^e \mod N$ for randomly sampled $x_i$, such that signature is known, except for $i^*$, where $H(m_{i^*}) = y$, where $y$ is given by the RSA challenge.\footnote{A reduction can program the random oracle to any value of its choice, as long as it's uniformly distributed.}
+
+Hope that forged $m^*$ comes from the $i^*$ query. This way, extraction and reduction is possible:
+
+$\cB$ wins whenever $\cA$ wins and $m^* = m_{i^*}$. Thus, $\epsilon_\cB \ge \frac{\epsilon_\cA}{q_H}$.\\
+
+The $q_H$ factor in the reduction makes it \textbf{lossy}, with an influence on the security parameters:
+
+Relying on the assumption that the best known factorization algorithm for RSA is GNFS, with success probability 1 and runtime $t_{GNFS} := C \cdot exp((\frac{64}{9})^{\frac{1}{3}}n^{\frac{1}{3}}ln(n)^\frac{2}{3})$, the existence of adversaries $\cA$ and $\cB$ should contradict it.
+
+$\cB$ wins with probability $\epsilon_\cB$ and runtime $t_\cB$. The Las Vegas algorithm derived from it, which achieves success probability 1 (i.e., repeat subroutine until correct), has expected runtime $\frac{1}{\epsilon_\cB} \cdot t_\cB$.
+
+Now, $\frac{1}{\epsilon_\cB} \cdot t_\cB \le \frac{q_H}{\epsilon_\cA} \approx \frac{q_H}{\epsilon_\cA} \cdot t_\cA$.\\
+
+To contradict the GNFS assumption it must be: $t_{GNFS}(n) > \frac{q_H}{\epsilon_\cA} \cdot t_\cA$, $n = \lfloor log_2(N) \rfloor + 1$.
+
+This implies that the larger the number of hash queries, the greater the RSA parameters must be for the theorem to hold.\\
+
+Reduction loss can be decreased up to $\cO(q_s)$, where $q_s$ is the number of signing queries, with a better strategy in the proof (see Exercises).
+
+\section{RSA-PSS}
+Preprocessing in this scheme is a bit more complex:
+\begin{itemize}
+    \item $Gen(1^k): $ as with textbook RSA.
+    \item $Sign(sk, m): \sigma := PSS\_Encode(m)^d \mod N$
+    \item $Vfy(pk, m, \sigma): y = \sigma^e \mod N$, check if $y$ is a valid PSS encoding of $m$.
+\end{itemize}
+
+\paragraph{PSS Encoding}
+Given $k_0, k_1$ s.t. $k_0+k_1 \le k-1$, \textbf{two} hash functions $H: \{0,1\}^* \rightarrow \{0,1\}^{k_1}$, $G: \{0,1\}^{k_1} \rightarrow \{0,1\}^{k-k_1-1}$, $G$ can be split into: $\forall w \in \{0,1\}^{k_1}: G(w) = G_1(w) || G_2(w)$.
+
+$G_1:$ first $k_0$ bits of $G$.
+
+$G_2:$ rest of $G$.
+
+Encoding works as follows:
+\begin{itemize}
+    \item choose $r \leftarrow \{0,1\}^{k_0}$ uniformly
+    \item $w:= H(m||r)$
+    \item $r^* :=  G_1(w) \oplus r$
+    \item $\gamma := G_2(w)$
+\end{itemize}
+
+encoding $:= 0||w||r^*||\gamma$\\
+
+Verification first checks if the first bit is 0, then splits $y = \sigma^e \mod N$ into $0, w', r^{*'}, \gamma'$, computes $r' = r^{*'} \oplus G_1(w')$ and outputs 1 iff $\gamma' = G_2(w') \land w' = H(m||r')$.
+A graphic illustration of the algorithm is shown below.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=10cm]{pss}
+    \caption{Illustration  of the PSS encoding algorithm.}
+    \label{fig:pss_enc}
+\end{figure}
+
+Theorem: Assume $G, H$ \textbf{random oracles}. Then for every PPT $\cA$ that breaks the EUF-CMA security of RSA-PSS in time $t_\cA$, with at most $q_H$ hash queries and $q_s$ signature queries and success probability $\epsilon_\cA$, there exists a PPT $\cB$ that solves the RSA problem in time $t_\cB$ with success probability and runtime:
+\begin{align}
+    \epsilon_\cB \ge \epsilon_\cA - (2(q_s + q_H)^2+1) \cdot (2^{-k_0} + 2^{-k_1})\\
+t_\cB \le t_\cA + (q_s + q_h + 1) \cdot k_0 \cdot \Theta(n^3).
+\end{align}
+
+Proof sketch: embed RSA challenge in \textbf{every} hash query. Upon signature queries, choose fresh new $r$ randomly with known signature $\rightarrow$ multiple encodings for the same message $m$. This way $\cA$ always solves the RSA problem (no guess).\\
+
+This scheme is in practice more efficient as the reduction is \textbf{less lossy} than RSA-FDH, even though two hash queries are required per every signature.
+
+\section{GHR signatures}
+So far, RSA schemes are either inefficient or rely on heuristic security (ROM). In order to construct EUF-CMA secure schemes in the \textbf{standard} model based on RSA, there is the following workaround, which \textbf{strengthens} the underlying assumption:
+\paragraph{Strong RSA problem}
+Given $N$, $y \leftarrow \Z_N$, but \textbf{not} $e$, find $x \leftarrow Z_N$, $e > 1$ with $x^e = y \mod N$.
+
+The strong RSA problem is a potentially \textbf{easier} problem than standard RSA. Hence, the relative assumption is \textbf{stronger}.\\
+
+Let $h: \{0,1\}^* \rightarrow \mathbb{P}$ (primes)
+\begin{itemize}
+    \item $Gen(1^k):$ choose $N = P \cdot Q$, $s \leftarrow \Z_N$.
+    
+    $pk = (N, s, h)$, $sk = (pk, \phi(N))$.
+    \item $Sign(sk, m): \sigma := s^{1/h(m) \mod \phi(N)} \mod N$
+    \item $Vfy(pk, m, \sigma): \sigma^{h(m)} = s \mod N$
+\end{itemize}
+
+Furthermore, this scheme assumes that: $\forall m \in \{0,1\}^*: gcd(h(m), \phi(N)) = 1$, which can be enforced by letting $h$ output \textbf{large} $(> N)$ primes.\\
+
+Theorem: for every PPT $\cA$ that breaks \textbf{EUF-naCMA} security of the scheme, there are PPTs $\cB$ and $\cC$ that break collision resistance of $h$ \textbf{OR} solve the sRSA problem, respectively, with success probability s.t. $\epsilon_\cB + \epsilon_\cC \ge \epsilon_\cA$.\\
+
+Proof: Divide the scenario into event $E_0 \lor E_1$:\\
+
+Event $E_0: $ there is an $m_i$ with $h(m_i) = h(m^*) \rightarrow$ reduce to collision-resistance of $h$.\\
+
+Event $E_1: $ for all $i \in \{1, ..., q\}$ we have $h(m_i) \neq h(m^*)$. Adversary $\cC$ gets as input $(N,y)$ and sets up $s:=y^{\prod_{i=1}^{q} h(m_i)} \mod N$ accordingly.\footnote{All the previous messages are needed, that's why we are proving for EUF-naCMA.} $s$ is "well-distributed" because for different $m_i \Rightarrow$ different $s$, because $h$ is invertible.
+
+The signature for $m_j$ is $\sigma_j = y^{\prod_{i=1 \char`\\ j}^{q} h(m_i)} \mod N$.\\
+
+We have $gcd(h(m^*), \prod_{i=1}^q h(m_i)) = 1$, since $h$ maps to \textbf{prime} numbers and $E_1$ occurred.
+
+Now use Shamir's trick for $(\sigma^*)^{h(m^*)} = s = y^{\prod_{i=1}^{q} h(m_i)} \mod N$, with $J$ being $y$ and $e$ being $h(m^*)$.
+
+Hence, $(x, h(m^*))$ is the desired sRSA solution.\\
+
+At least one of the two events must happen with a \textbf{non-negligible} probability if $\cA$ succeeds.\\
+
+How could we obtain such a hash function $h$? One solution would be to use a collision-resistant hash $H$ and set $h(m) := nextPrime(H(m)||0^l)$ (padding serves to randomize the function).
+However, this solution is not very efficient (polynomial time for computing primes).\\
+
+The construction of an efficient EUF-CMA secure scheme from RSA is still an \textbf{open problem}.
+
+\chapter{Chameleon hash functions and signatures}
+The goal of these constructs is to build a signature scheme, such that \textbf{authenticity} can still be verified, even though it is \textbf{not possible to convince third parties} of the signed message anymore (i.e., signer's message deniability).
+
+\section{Chameleon hash functions}
+A chameleon hash function $CH$ consists of two PPT algorithms $(Gen_{CH}, TrapColl_{CH})$ such that:
+\begin{itemize}
+    \item $Gen_{CH}(1^k)$ outputs a trapdoor $\tau$ and a function $ch: \mathcal{M} \times \mathcal{R} \rightarrow \mathcal{N}$, where $\mathcal{M}$ is the message space, and $\mathcal{R}$ is a randomness space.
+    
+    \item $TrapColl_{CH}(\tau, m, r, m')$ outputs $r' \in \mathcal{R}$ such that $ch(m,r) = ch(m',r')$.
+\end{itemize}
+
+This means the \textbf{preimage} can be \textbf{changed} by the \textbf{owner} (like a chameleon changes colour).\\
+
+We require this function to be \textbf{well-distributed}: for random $r$, $r'$ is also random, and \textbf{collision-resistant} without the knowledge of $\tau$ (an adversary $\cA$ that knows \textbf{only} $ch$ cannot produce a collision with a non-negligible probability).
+
+\paragraph{Chameleon hashing based on DLog}
+As usual, $\G$ group of prime order $p$, generator $g$:
+\begin{itemize}
+    \item $Gen(1^k): x \leftarrow \Z_p^*$, $h := g^x$, $ch := (g,h)$, $\tau := x$.
+    
+    $ch(m,r) := g^m \cdot h^r$
+    
+    \item $TrapColl(\tau, m, r, m'): $ compute $r'$ equalizing $ch(m,r) = ch(m',r')$ and knowing $x \Rightarrow r' = \frac{m-m'}{x} + r \mod p$.
+\end{itemize}
+
+Theorem: for every PPT $\cA$ that breaks collision-resistance of $CH$, namely given $ch = (g,h)$, outputs a tuple $(m,r,m',r')$, with $(m,r) \neq (m',r')$, there exists a PPT $\cB$ that breaks the DLog problem in $\G$ with roughly same runtime and success probability $\epsB \ge \epsA$.\\
+
+Proof: similar to DLog based one-time signatures.
+
+\paragraph{Chameleon hashing based on RSA (prime-$e$-)}
+\begin{itemize}
+    \item $Gen(1^k): N = P \cdot Q$, message space $\Z_{2^l}$, prime $e > 2^l$ with $gcd(e, \phi(N)) = 1$, $J \leftarrow \Z_N$, $ch := (N,e,J)$, $\tau := d$.
+    
+    $ch(m,r) := J^m \cdot r^e \mod N$
+    
+    \item $TrapColl(\tau, m, r, m'): $ compute $r'$ equalizing $ch(m,r) = ch(m',r')$ and knowing $d \Rightarrow r' = (J^{m-m'}\cdot r^e)^d \mod N$.
+\end{itemize}
+
+Theorem: for every PPT $\cA$ that breaks collision-resistance of $CH$, there exists a PPT $\cB$ that solves the \textbf{prime-$e$-RSA} problem with roughly same runtime and success probability $\epsB \ge \epsA$.\\
+
+Proof: similar to RSA based one-time signatures.
+
+\section{Chameleon signatures}
+Given $CH = (Gen_{CH}, TrapColl_{CH})$ and a signature scheme $\Sigma' = (Gen', Sign', Vfy')$, a chameleon signature scheme $\Sigma$ is defined as:
+\begin{itemize}
+    \item $Gen(1^k)$ runs $Gen'(1^k)$ and $Gen_{CH}(1^k)$ such that $pk = (pk', ch)$ and $sk = (sk', \tau)$.
+    \item $Sign(sk, m, ch)$ runs on $ch$ of the \textbf{receiver}! 
+    
+    $r \leftarrow \mathcal{R}$, $ch(m,r) =: y$, $\sigma' = Sign'(sk, y)$, $\sigma = (\sigma', r)$.
+    \item $Vfy(pk, m, \sigma, ch)$ runs $Vfy'(pk', ch(m,r), \sigma')$.
+\end{itemize}
+
+\textbf{Question:} is the EUF-CMA security notion "strong" enough for this scheme? $\rightarrow$ \textbf{No}! Because it is \textbf{not realistic}!
+
+An adversary could choose his own $ch_i$ for every query, but the standard scheme enforces to use $ch$ chosen by the challenger.
+
+The following attack is possible if we take this possibility into account:\\
+
+Suppose a DLog-based CH is used. $\cA$ receives $ch = (g,h)$ from the challenger, but defines $ch_\cA := (g^a, h)$, for $a \neq 1$ chosen by $\cA$. This is still a valid CH function fulfilling the properties mentioned above.
+
+$\cA$ queries $m$ under $ch_\cA$ and receives $\sigma = (\sigma', r)$. $\cA$ sends the forgery $(m^* = a \cdot m \neq m, \sigma)$ under $ch$ which verifies to 1:
+
+$1 = Vfy(pk, m, \sigma, ch_\cA) = Vfy'(pk, ch_\cA(m,r), \sigma') = Vfy'(pk, ch(a \cdot m, r), \sigma') = Vfy(pk, m^* = a \cdot m, \sigma, ch)$.\\
+
+This means that an EUF-CMA secure chameleon signature scheme \textbf{breaks completely} once the adversary can query signatures for \textbf{different recipients}, if they can \textbf{choose} their own $ch_i$.\\
+
+In the following, we will consider this \textbf{weak} version of EUF-CMA as it allows to develop simpler proofs.\\
+
+Theorem: for every PPT $\cA$ that breaks \textbf{EUF-CMA} security of $\Sigma$, there exist PPTs $\cC$ and $\cB$ that respectively break collision-resistance of $CH$ \textbf{or} \textbf{EUF-naCMA} security of $\Sigma'$ with roughly same runtime and success probability:
+\begin{align}
+    \epsB + \epsC \ge \epsA
+\end{align}
+
+Proof: Let $(m^*, \sigma^*)$ be the output forgery by $\cA$, and $\sigma_i = (\sigma'_i, r_i)$ the reply to $m_i$'s query.
+
+Two disjoint events happen: $E_0$, $\cA$ wins and there is an $i$ with $ch(m_i, r_i) = ch(m^*, r^*)$;
+
+$E_1$, $\cA$ wins and $ch(m^*,r^*) \neq ch(m_i, r_i)$ for all $i$.
+
+If $E_0$, usual reduction to collision-resistance of $ch$.\\
+
+If $E_1$, choose in advance $m'_i = ch(M_i,R_i)$ for arbitrary $M_i, R_i$. Since EUF-naCMA of $\Sigma'$ excludes a signing oracle for $\Sigma'$, use $\tau$ to generate $r_i: ch(m_i,r_i) = m'_i$.
+
+Upon receipt of forgery $(m^*, \sigma^*)$, $\sigma'^*$ is a valid signature for $m'^* = ch(m^*, r^*)$, and $m'^* \neq m'_i$ because $E_1$ happened.
+
+\section{Chameleon hash functions are one-time signatures}
+Given $CH = (Gen_{CH}, TrapColl_{CH})$, construct a one-time signature scheme $\Sigma$ with:
+\begin{itemize}
+    \item $Gen(1^k): $
+    \begin{itemize}
+        \item $(ch, \tau) \leftarrow Gen_{CH}(1^k)$
+        \item $(\widetilde{m}, \widetilde{r}) \leftarrow \mathcal{M} \times \mathcal{R}$
+        \item $c := ch(\widetilde{m}, \widetilde{r})$
+        \item $pk := (ch,c), sk := (\tau, \widetilde{m}, \widetilde{r})$
+    \end{itemize}
+    \item $Sign(sk, m): \sigma := r = TrapColl_{CH}(\tau, \widetilde{m}, \widetilde{r}, m)$
+    \item $Vfy(pk, m, \sigma): c = ch(m, \sigma)$
+\end{itemize}
+
+Theorem: the scheme $\Sigma$ is \textbf{EUF-1-naCMA} secure if $CH$ is collision-resistant.
+
+\section{Stronger form of EUF-CMA security}
+The \textbf{strong EUF-CMA} experiment is won by an adversary $\cA$ iff $Vfy(pk, m^*, \sigma^*) = 1 \land (m^*, \sigma^*) \notin \{(m_1,\sigma_1), ..., (m_q, \sigma_q)\}$.\\
+
+This means that $\cA$ can win even if $m^*$ has been \textbf{signed before}, as long as $\sigma^*$ is \textbf{fresh}.\\
+
+Given an EUF-CMA secure scheme $\Sigma'$, and a CHF $CH$, it is possible to construct a \textbf{sEUF-CMA secure} scheme $\Sigma$:
+\begin{itemize}
+    \item $Gen(1^k): $
+    \begin{itemize}
+        \item $(pk', sk') \leftarrow Gen'(1^k)$
+        \item $(ch_F, \tau_F) \leftarrow Gen_{CH}(1^k)$
+        \item $(ch_H, \tau_H) \leftarrow Gen_{CH}(1^k)$
+        \item $pk := (pk', ch_F, ch_H), sk := (sk', \tau_H)$
+    \end{itemize}
+    \item $Sign(sk, m):$\footnote{Can also be done in another way relying on $\tau_F$.} Let $m', \sigma'$ arbitrary,
+    \begin{itemize}
+        \item $r_F \leftarrow \mathcal{R}$, $r'_H \leftarrow \mathcal{R}$
+        \item $h := ch_H(m'||\sigma', r_H')$
+        \item $\widetilde{m} := ch_F(h, r_F)$
+        \item $\widetilde{\sigma} \leftarrow Sign'(sk', \widetilde{m})$
+        \item $r_H \leftarrow TrapColl_{CH}(\tau_H, m'||\sigma', r'_H, m||\widetilde{\sigma})$
+        \item $\sigma := (\widetilde{\sigma}, r_F, r_H)$
+    \end{itemize}
+    \item $Vfy(pk, m, \sigma): $
+    \begin{itemize}
+        \item $h := ch(m||\widetilde{\sigma}, r_H)$ (circular dependency\footnote{A negligible change in the signature affects the whole scheme. Every piece of the construction is meaningful and protected.} generated by $TrapColl_{CH}$)
+        \item $\widetilde{m} = ch_F(h, r_F)$
+        \item $Vfy'(pk', \widetilde{m}, \widetilde{\sigma}) = 1$
+    \end{itemize}
+\end{itemize}
+
+Theorem: if $CH$ is collision-resistant and $\Sigma'$ is EUF-CMA secure, then $\Sigma$ is sEUF-CMA secure.\\
+
+Proof idea (see B.4.4): Case $E_0:$ "forgery contains reused $\widetilde{m}^* " = \widetilde{m}_i \rightarrow$ reduction to CHF-CR. But how can we rely on both being CR if we use one of them for signing? In reduction, guess which $ch$ is broken, and use the other for the trapdoor needed for signing. Otherwise reduction would be useless (we have the trapdoor!). This is why two functions are needed! Case $E_0$ can thus be split into two sub-events.\\
+
+If we could rely on \textbf{both} CHFs being collision-resistant, then we would have: same $\widetilde{m} \Rightarrow$ same $h, r_F \Rightarrow$ same $m, \widetilde{\sigma}, r_H \Rightarrow$ same $m, \sigma$. Hence, fresh $(m, \sigma) \Rightarrow$ fresh $\widetilde{m}$.
+
+Case $E_1:$ "forgery contains fresh $(m^*, \sigma^*) " \rightarrow$ fresh $\widetilde{m}^*$ (see above) $\rightarrow$ trivially reduce to EUF-CMA by relaying.
+
+\chapter{Pairing-based signatures}
+Let $\G_1, \G_2, \G_T$ be cyclic groups of prime order $p$. A \textbf{pairing} is a map $e: \G_1 \times \G_2 \rightarrow \G_T$ with the following properties:
+\begin{itemize}
+    \item Bilinearity: $\forall g_1, g_1' \in \G_1: e(g_1 \cdot g'_1, g_2) = e(g_1, g_2) \cdot e(g'_1, g_2)$ and for $g_2, g'_2 \in \G_2$ as well $\Rightarrow e(g_1^a, g_2) = e(g_1, g_2)^a = e(g_1, g_2^a)$.
+    \item Non-degeneracy: for all generators $g_1 \in \G_1$ and $g_2 \in \G_2: e(g_1, g_2) \neq 1$  (if prime $p$) and generates $\G_T$.
+    \item $e$ is efficiently computable.
+\end{itemize}
+
+Note: a pairing operation is \textbf{less} efficient than exponentiation.
+
+There are three types of pairings: if $\G_1 = \G_2 = \G$, the pairing is \textbf{symmetric} (type 1), otherwise it's asymmetric.
+
+Asymmetric pairings can be transformed to symmetric ones via an efficient (type 2), or not efficient (type 3), homomorphism.
+
+\paragraph{Joux's 3-party key exchange}
+Being bilinear, pairings can be used to efficiently exchange a secret key $k = e(g,g)^{abc}$, just by knowing a secret value $a$, and applying bilinearity on $e(g^b, g^c)^a$. This applies for groups where this problem is difficult without knowing at least a secret value, of course.
+
+\section{BLS signatures}
+The following scheme is a simple way of using pairings in a signature scheme, which outputs \textbf{short} signatures.
+Let $e: \G \times \G \rightarrow \G_T$ be a symmetric pairing over a group of prime order $p$ of generator $g$.
+Given a hash function $H: \{0,1\}^* \rightarrow \G \setminus \{1\}$:
+\begin{itemize}
+    \item $Gen(1^k): sk = x \leftarrow \Z^*_p, pk = (g, g^x)$
+    \item $Sign(sk, m): \sigma = H(m)^x \in \G$
+    \item $Vfy(pk, m, \sigma): e(H(m), g^x) = e(\sigma, g)$
+\end{itemize}
+
+Correctness is trivially verified.
+
+This signature scheme is built over groups where the following problem is hard:
+
+\paragraph{Computational Diffie-Hellman problem (CDH)}
+Given $(g, g^x, g^y)$, compute $g^{xy}$.
+
+Note: self-bilinear pairings ($\G_T = \G_1 = \G_2$) efficiently break CDH: $e(g,g) = g^{\alpha}, \alpha \neq 1 \rightarrow e(g^x,g^y) = g^{\alpha xy}$.
+
+$g^{xy} = e(g^{\alpha xy}, g^{\alpha^{-2}})$, where $g^{\alpha^{-2}} = g^{\alpha^{p-3}} \mod p$ is efficiently computed from $e(g,g)$ with square-and-mult and applying Fermat's little theorem.\\
+
+Theorem: Assuming $H$ is modeled as a \textbf{random oracle}, for every PPT $\cA$ that breaks \textbf{EUF-CMA} security of a BLS signature scheme, there exists a PPT $\cB$ that solves the CDH problem with roughly same runtime and success probability $\epsB \ge \frac{\epsA}{q_H}$, where $q_H$ is the number of hash queries.\\
+
+Proof: Assuming $\cA$ always makes hash queries before, $\cB$ simulates the random oracle and performs the EUF-CMA challenge, embedding $g^y$ received from the CDH challenge in the hash query $H(m^*)$, of index $i^*$, guessed randomly.
+
+Otherwise, embed $g^{y_i}$ from randomly chosen $y_i$ in order for the EUF-CMA simulation to be correct.\\
+
+Just like RSA-FDH, the proof can be improved to loss of $\cO(q_s)$ (\# of signing queries, cf. Exercises).\\
+
+Overall, this signature has a ROM security proof, which is neither tight. However, it provides \textbf{short}, efficient, and \textbf{simple} signatures, with interesting properties:
+\begin{itemize}
+    \item \textbf{Aggregability}: in order to verify signatures of messages from many (potentially different) senders, a naive solution would just be to linearly iterate over them.
+    
+    BLS signatures ensure that verifying a single aggregate signature $|\sigma_{Agg}| = |\sigma_i|$ (plus cost of aggregating) is more efficient than verifying the single signatures:
+    
+    $\sigma_{Agg} := \prod_{i = 1}^{n} \sigma_i$.
+    
+    $Vfy(pk_1, ..., pk_n, m_1, ..., m_n, \sigma_{Agg}): e(\sigma_{Agg}, g) = \prod_{i = 1}^{n} e(H(m_i), g^{x_i})$.\\
+    
+    Correctness and EUF-CMA security are mantained while performing only $n+1$ pairing operations instead of $2n$ (2 operations per signature) when verifying.
+    
+    \item \textbf{Batch verification}: in order to verify signatures of messages from a \textbf{single} sender, only \textbf{two} pairing operations are sufficient:
+    
+    $h := \prod_{i=1}^{n} H(m_i)$, $\sigma := \prod_{i = 1}^{n} \sigma_i$
+    
+    $Vfy(pk, m_1, ..., m_n, \sigma): e(\sigma, g) = e(h, g^x)$
+\end{itemize}
+
+\section{Waters' signatures}
+This pairing-based signatures scheme is EUF-CMA secure under CDH in the \textbf{standard model}.
+
+In order to achieve this result, some sort of \textbf{programmability} of a hash function is needed, a property that simulates the intrinsic programming operations performed by a random oracle.
+
+\subsection{Programmable Hash Functions}
+Intuitively, such hash functions partition the set of hashable messages into a \textit{controlled} set, for which a reduction can \textbf{sign} the message in the scheme, and an \textit{uncontrolled} set, for which CDH can be embedded into $m$.\\
+
+The most useful hash function would be the one that solves the DLog problem (using a trapdoor) for controlled messages, whilst for some $m$, DLog is hard even given the trapdoor.
+
+However, this is hard to achieve, as knowing most DLogs usually allows to infer it for \textbf{all} messages.\\
+
+A refinement is needed:
+
+$m$ controlled $\iff H(m) = h^{a_m}g^{b_m} \land a_m \neq 0$
+
+$m$ uncontrolled $\iff H(m) = h^{a_m}g^{b_m} \land a_m = 0$,
+
+where $g, h$ are publicly known generators of a cyclic group $\G$, but exponents are only known to reduction.
+
+More formally:
+
+Given a group hash function family $H_\kappa : \{0,1\}^l \rightarrow \G$, a group hash function (GHF) is $(v, w, \gamma)$-programmable (PHF) iff it is equipped with the following PPT algorithms:
+\begin{itemize}
+    \item $Gen(1^k) \rightarrow \kappa$
+    \item $TrapGen(g, h) \rightarrow (\kappa, \tau)$
+    \item $Eval(\kappa, m) \rightarrow H_\kappa(m) \in \G$ (deterministic)
+    \item $TrapEval(\tau, m) \rightarrow (a_m, b_m)$, with $h^{a_m}g^{b_m} = H_\kappa(m)$ (deterministic)
+\end{itemize}
+
+and has the following properties:
+\begin{itemize}
+    \item $\kappa$ from $Gen$ is \textbf{statistically close} to $\kappa$ from $TrapGen$ (same distribution, indistinguishable).
+    \item $TrapEval$ has $(v, w, \gamma)$-\textbf{well-distributed} outputs, for $v, w \in \N, \gamma \in [0,1]$.
+\end{itemize}
+
+The second property means that for all generators $g, h$ of $\G$, two sets of messages $m_1^*, ..., m_v^* \in \{0,1\}^l$, and $m_1, ..., m_w \in \{0,1\}^l$, and $\kappa$ statistically close to the one in $TrapGen$:
+\begin{align}
+    Pr[a_{m_i^*} = 0\quad \forall\ i = 1,...,v\ \land\ a_{m_j} \neq 0\quad \forall\ j = 1,...,w] \ge \gamma,
+\end{align}
+over $\tau$.
+
+Intuition: the \textbf{greater} $\gamma$, the more likely the signature reduction will succeed.\\
+
+Claim: $\gamma \le 1/2^{\min\{v,w\}} \Rightarrow$ cannot have both large $v$ and $w$.
+
+This is not an issue in our application as we are interested in $(1, q, \gamma)$-\textbf{programmability} for the reduction proof.
+
+\subsection{Waters' programmable hash function}
+Let $q = q(k)$ be a polynomial. Then the following hash function is $(1,q,\gamma)$-\textbf{programmable} for $\gamma = 1/\Theta(q\sqrt{k})$:
+\begin{itemize}
+    \item $Gen(1^k):$ choose $u_0, ..., u_k \leftarrow \G \Rightarrow \kappa = (u_0, ..., u_k)$
+    \item $TrapGen(g, h):$ choose $\widehat{a_i} \in \Z_p$ suitably (see later), and $\widehat{b_i} \leftarrow \Z_p$ randomly. Let $u_i = h^{\widehat{a_i}}g^{\widehat{b_i}}$.
+    
+    $\tau = (\widehat{a_0}, ..., \widehat{a_k}, \widehat{b_0}, ..., \widehat{b_k})$
+    \item $Eval(\kappa, m = m^{(1)}...m^{(k)}): H_\kappa(m) = u_0 \prod_{i=1}^{i=k} u_i^{m^{(i)}}$, $m^{(i)} \in \{0,1\}$
+    \item $TrapEval(\tau, m = m^{(1)}...m^{(k)}):$ compute $a_m = a_0 + \sum_{i = 1}^{i = k} \left(\widehat{a_i}m^{(i)}\right)$, and $b_m = b_0 + \sum_{i = 1}^{i = k} \left(\widehat{b_i}m^{(i)}\right)$, such that:
+    
+    ${\displaystyle h^{a_m}g^{b_m} = h^{\widehat{a_0}} \prod_{i = 1}^{i = k} h^{\widehat{a_i} m^{(i)}} \cdot g^{\widehat{b_0}} \prod_{i = 1}^{i = k} g^{\widehat{b_i}m^{(i)}} = \left(h^{\widehat{a_0}} g^{\widehat{b_0}}\right) \prod_{i = 1}^{i = k} \left(h^{\widehat{a_i}}g^{\widehat{b_i}}\right)^{m^{(i)}} = H_\kappa(m)}$
+\end{itemize}
+
+By sampling $\widehat{b_i}$ uniformly from $\Z_p$, also $u_i$ and thus $\kappa$ from $TrapGen$ has a uniform distribution, regardless of how $\widehat{a_i}$ is chosen (this is in fact the purpose of having $g^{b_m}$).
+
+$\widehat{a_i}$ is chosen such that $(1, q, \gamma)$-well-distribution is achieved:
+
+The idea is to set up each of them as random walks: ${\displaystyle \widehat{a_i} = \sum_{j=1}^{L}\widehat{a_{i,j}}}$, for $\widehat{a_{i,j}} \leftarrow \{-1,0,1\}$ and $L = \Theta(q)$.
+
+This way, the sum of random walks $a_m$ fulfills the following constraint: $1/\Theta(q\sqrt{k}) \le Pr[a_m = 0] \le 1/\Theta(q)$, depending on the Hamming weight of the message.
+
+The free result $Pr[\forall i: a_{m_i} \neq 0\ |\ a_{m^*} = 0] \ge 1/2 \Rightarrow Pr[\forall i: a_{m_i} \neq 0 \land a_{m^*} = 0] \ge 1/\Theta(q\sqrt{k})$, which is what we were looking for.
+
+\subsection{Waters' signatures}
+Given a symmetric pairing and a PHF $H$, this signature scheme is based on the following algorithms:
+\begin{itemize}
+    \item $Gen(1^k): g^{\alpha} \in \G, \kappa \leftarrow Gen_H(1^k)$.
+    
+    $pk = (g, \kappa, e(g, g^\alpha)), sk = g^\alpha$
+    
+    \item $Sign(sk, m): r \leftarrow \Z_p, \sigma_1 := g^r, \sigma_2 := g^\alpha\cdot H_\kappa(m)^r$.
+    
+    $\sigma = (\sigma_1, \sigma_2)$
+    
+    \item $Vfy(pk, m, \sigma): e(g, \sigma_2) = e(g, g^\alpha) \cdot e(\sigma_1, H_\kappa(m))$
+\end{itemize}
+
+Correctness is trivially verified.
+
+Theorem: Let $H$ be a $(1, q, \gamma)$-PHF for any polynomial $q$. For every PPT $\cA$ that breaks \textbf{EUF-CMA} security of the scheme, there exists a PPT $B$ that breaks \textbf{CDH} with roughly same runtime and success probability $\epsB \ge \gamma \cdot \epsA$.\\
+
+Proof: $\cB$ gets CDH challenge $(g, g^x, g^y)$, generates $(\kappa, \tau) \leftarrow TrapGen(g, g^x)$ and sets $pk = (g, \kappa, e(g^x, g^y))$. This implicitly sets $\alpha = xy$, even if it does not know this value $\Rightarrow$ there is an \textbf{alternative} way to sign, thanks to the \textbf{decomposition} of the PHF!\\
+
+$\cB$ wins if $\cA$ wins and $a_{m_i} \neq 0$ for all signature queries and $a_{m^*} = 0$ for the forgery $m^*$. This happens with probability $\gamma$ by construction, thus: $\epsB \ge \gamma \cdot \epsA$.\\
+
+How does simulation work in this setting? $TrapEval$ derives $H_\kappa(m) = (g^x)^{a_m}g^{b_m}$.
+
+Choose fresh $s \leftarrow \Z_p$ and set $\sigma_1 := (g^y)^{-1/a_m} \cdot g^s$. This implicitly sets $r = -y/a_m + s$, which we don't need to know.
+\begin{align}
+    \sigma_2 := (g^x)^{a_m s} \cdot (g^y)^{-b_m/a_m} \cdot g^{b_m s}
+\end{align}
+
+We actually need to show that $\sigma_2 = g^{xy}H(m)^r \Rightarrow$ Group factors in the exponent and multiply and divide by $g^{xy}$. This is valid \textbf{only} if $a_m \neq 0$ !!!\\
+
+Upon receipt of the forgery $(m^*, \sigma^*), H(m^*) = g^{b^*}$. Then extract $g^{xy}$ as:
+\begin{align}
+    \sigma_2^* \cdot (\sigma_1^*)^{-b^*} = g^{xy} \cdot H(m^*)^{r^*} \cdot g^{-b^* r^*} = g^{xy}
+\end{align}
+
+Basically, all values are set up in a \textbf{clever way}, so that the $g^{xy}$-term cancels out when signing, and shows up only at the forgery.\\
+
+This signature scheme is \textbf{less} efficient than BLS (has more pairing operations), but it's proved to be secure in the \textbf{standard model}.
+
+\chapter{Identification-scheme-based signatures}
+
+The goal of an identification scheme is \textbf{asymmetric authentication} of parties.
+
+More specifically, a \textbf{verifier} V wants to be certain that a \textbf{prover} P knows a secret key $sk$. Of course, V should \textbf{not learn} $sk$ itself, so simply sending the latter to it would not be useful.\\
+
+Using a signature scheme in a \textbf{non-interactive} way allows an adversary to impersonate the authenticated prover! An interactive attempt, on the other hand, does not explicitly imply the guarantees mentioned above.\\
+
+Clearly, a more formal approach should be defined:
+\section{Sigma protocols}
+Sigma-protocols are \textbf{three-move} protocols that prove knowledge of $sk$ through the exchange of three messages: commitment $com: P \rightarrow V$, challenge $ch: V \rightarrow P$, response $res: P \rightarrow V$.
+
+V finally outputs a bit to indicate whether it is convinced.\\
+
+Note: $ch$ \textbf{must} be chosen uniformly at \textbf{random}.
+
+The verifier does not use any hidden coins, the protocol is \textbf{publicly accessible}.
+
+A sigma protocol has to satisfy the following properties: given a relation $\mathcal{R}$, with $(pk, sk) \in \mathcal{R}$ for \textit{corresponding} $(pk, sk)$,
+\begin{itemize}
+    \item \textbf{Completeness}: $(pk, sk) \in \mathcal{R} \Rightarrow V$ outputs 1
+    \item \textbf{Special soundness}: from any two accepting transcripts with same $com, pk$, it is possible to efficiently \textbf{extract} $sk$.
+    \item \textbf{Special honest-verifier zero-knowledge}: given $pk$ and \textbf{random} $ch$, can efficiently compute accepting $com, res \Rightarrow V$ \textbf{cannot convince} third parties that communication ever happened. 
+\end{itemize}
+
+Example: 
+
+$pk = (g, g^x), sk = x$
+
+$com = g^k$ for $k \leftarrow \Z_p$
+
+$ch = e \leftarrow \Z_p$
+
+$res = k+xe \mod p$
+
+The above properties can be easily verified for this scheme.\\
+
+Other than identification schemes, sigma protocols can be used for proof systems and for \textbf{signature schemes}. The latter can be built by making the protocol \textbf{non-interactive}, as if the signer talks to itself.
+
+The following transformation allows this construction.
+
+\section{Fiat-Shamir transformation and derived signatures}
+Let $H$ be a hash function with range of $ch$, then set $ch := H(com, m)$, and $\sigma := (com, res)$.\\
+
+Let $\mathcal{R}$ be an efficiently computable relation for checking if $(pk, sk)$ is a corresponding pair of keys. We say that $\mathcal{R}$ is \textbf{hard} if every adversary $\cA$ has negligible probability to extract a corresponding key $sk'$ by only knowing $pk$.\\
+
+Theorem: for every PPT $\cA$ that breaks \textbf{EUF-CMA} security on a Fiat-Shamir-based signature scheme, there exists a PPT $\cB$ on the \textbf{hardness} of $\mathcal{R}$ with roughly same runtime and success probability $\Theta(\epsA^2/q)$, where $q$ is the number of hash queries in the \textbf{random oracle} model (ROM).\\
+
+Proof: The problem is $\cB$ does not know $sk$ to sign messages. The workaround is to make use of the special HVZK property of the protocol: when asked to \textbf{hash} $com, m$, just choose a \textit{fresh} image $H(com, m)$. When asked to \textbf{sign} $m$, choose $ch$ randomly and derive $com', res'$, and set $H(\textcolor{red}{com'}, m) := ch$.\\
+
+What about extraction? The aim is to use special soundness, but the forgery $(com^*, res^*)$ is not enough, as we need \textbf{two} different transcripts.
+
+Solution lies in "\textbf{time travel}": run experiment, if $\cA$ does not fail then \textbf{rewind} to the first time we gave $\cA$ the value $H(com^*, m^*) = ch^*$. This time, output $H(com^*, m^*) = ch' \neq ch^*$, then \textbf{hope} $\cA$ forges again on $m^*$ (forking lemma).\\
+
+These signature schemes are very simple and \textbf{efficient}, but have a \textbf{lossy} reduction!
+
+\textbf{Schnorr signatures} use the \textbf{DLog} scheme for the sigma protocol: $pk = (g, g^x), sk = x$.
+
+$Sign(sk, m):$ choose $k \leftarrow \Z_p$, set $e = H(com, m) = H(g^k, m)$, $\sigma = (com, res) = (g^k, k+xe \mod p)$
+
+$Vfy(pk, m, \sigma): g^{\sigma_2} = \sigma_1 \cdot (g^x)^e$
+
+\appendix
+
+\chapter{Proof strategies}
+
+Let $A$ be an assumption (e.g., “$f$ is a one-way function”), and $S$ be a security claim (e.g., “Lamport signatures with $f$ are EUF-1-naCMA secure”).
+
+To need to show: $A \Rightarrow S$, we often show: $\neg S \Rightarrow \neg A$.\\
+
+More practically, show that for every adversary $\cA$ breaking the security claim, there exists an adversary $\cB$ breaking the security assumption. Challenger $\cC$ challenges $\cB$, $\cB$ transforms $\cC$'s input and challenges $\cA$ (simulation).
+
+Transforming $\cA$'s successful output, $\cB$ responds to $\cC$ (extraction).\\
+
+This proof system must further show that $\cA$ must not be able to distinguish $\cB$ from a honest challenger $\Rightarrow$ show that exchanged values have same distribution.
+
+Moreover, hope that runtimes are comparable and success probability reduction is tight.\\
+
+For statements like: $(A \land B) \Rightarrow S$ it is equivalent to show $\neg S \Rightarrow (\neg A \lor \neg B)$.
+
+\chapter{Summary}
+
+\paragraph{Hash-then-Sign}
+EUF-CMA + CR $H \rightarrow$ EUF-CMA
+
+$\epsB + \epsC \ge \epsA$
+
+\paragraph{Lamport's one-time signatures}
+One-way function $\rightarrow$ EUF-1-CMA
+
+$\epsB \ge \frac{\epsA}{n}$, where $n$ is the length of the message
+
+\paragraph{DLog-based one-time signatures}
+DLog hard $\rightarrow$ EUF-1-naCMA
+
+$\epsB \ge \epsA$
+
+\paragraph{RSA-based one-time signatures}
+Prime-$e$-RSA hard $\rightarrow$ EUF-1-naCMA
+
+$\epsB \ge \epsA$
+
+\paragraph{Reusable scheme from one-time signatures}
+EUF-1-naCMA + EUF-naCMA $\rightarrow$ EUF-CMA
+
+$q \cdot \epsB + \epsC \ge \epsA$
+
+\paragraph{Textbook RSA}
+RSA hard $\rightarrow$ UUF-NMA, \textbf{NOT} EUF-NMA
+
+$\epsB \ge \epsA$
+
+\paragraph{RSA PKCS \#1 v1.5}
+No attacks known, no security proof
+
+\paragraph{RSA-FDH}
+RSA hard $\rightarrow$ EUF-CMA in \textbf{ROM}
+
+$\epsB \ge \frac{\epsA}{q_H}$, can be improved to $\epsB \ge \frac{\epsA}{2e\cdot q_S}$
+
+\paragraph{RSA-PSS}
+RSA hard $\rightarrow$ EUF-CMA in \textbf{ROM}, less lossy reduction
+
+$\epsB \ge \epsA - w, w \in \cO((q_S + q_H)^2 \cdot (2^{-k_0} + 2^{-k_1}))$ (negligible)
+
+\paragraph{GHR signatures}
+sRSA hard + CR $H \rightarrow$ EUF-naCMA in the \textbf{standard} model
+
+$\epsB + \epsC \ge \epsA$
+
+\paragraph{DLog-based CHF}
+DLog hard $\rightarrow$ CHF collision resistant
+
+$\epsB \ge \epsA$
+
+\paragraph{RSA-based CHF}
+Prime-$e$-RSA hard $\rightarrow$ CHF collision resistant
+
+$\epsB \ge \epsA$
+
+\paragraph{Chameleon signatures}
+EUF-naCMA + CHF collision resistant $\rightarrow$ EUF-CMA (weak version)
+
+$\epsB + \epsC \ge \epsA$
+
+\paragraph{CHFs are one-time signatures}
+CHF collision resistant $\rightarrow$ EUF-1-naCMA (also sEUF-1-naCMA)
+
+$\epsB \ge \epsA$
+
+\paragraph{Strong EUF-CMA security}
+EUF-CMA + CHF family collision resistant $\rightarrow$ sEUF-CMA
+
+$\epsB + 2\cdot \epsC \ge \epsA$
+
+\paragraph{BLS signatures}
+CDH hard $\rightarrow$ EUF-CMA in \textbf{ROM} (also aEUF-CMA)
+
+$\epsB \ge \frac{\epsA}{q_H}$, can be improved to $\epsB \ge \frac{\epsA}{2e\cdot q_S}$
+
+\paragraph{Waters' PHF}
+$(1, q, \gamma)$-PHF $\Rightarrow \gamma \ge 1/\Theta(q\sqrt{k})$
+
+\paragraph{Waters' signatures}
+CDH hard $\rightarrow$ EUF-CMA in the \textbf{standard} model
+
+$\epsB \ge \gamma \cdot \epsA$
+
+\paragraph{Fiat-Shamir-based signature schemes}
+$\mathcal{R}$ hard $\rightarrow$ EUF-CMA in \textbf{ROM}
+
+$\epsB \approx \Theta(\frac{\epsA^2}{q_H})$
+
+\end{document}
